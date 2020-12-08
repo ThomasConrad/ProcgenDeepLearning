@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class ClassifierModel(nn.Module):
+class Net(nn.Module):
     def __init__(self, input_channels, input_height, input_width, num_classes):
         super().__init__()
         self.num_classes = num_classes
