@@ -3,8 +3,8 @@
 #BSUB -gpu "num=1"
 #BSUB -J baseline_climber
 #BSUB -n 1
-#BSUB -W 23:45
-#BSUB -R "rusage[mem=32GB]"
+#BSUB -W 10:00
+#BSUB -R "rusage[mem=64GB]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
 #BSUB -u s183742@student.dtu.dk

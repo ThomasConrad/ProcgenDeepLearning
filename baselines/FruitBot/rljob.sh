@@ -4,7 +4,7 @@
 #BSUB -J baseline_fruitbot
 #BSUB -n 1
 #BSUB -W 23:45
-#BSUB -R "rusage[mem=32GB]"
+#BSUB -R "rusage[mem=64GB]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
 #BSUB -u s183742@student.dtu.dk
