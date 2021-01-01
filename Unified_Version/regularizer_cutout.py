@@ -14,20 +14,21 @@ import csv
 # Leave unchanged between comparison runs
 
 # Hyperparameters
-total_steps = 5e6
-num_envs = 32
-num_levels = 10
+total_steps = 8e6
+num_envs = 64
+num_levels = 100
 num_steps = 256
 num_epochs = 3
-batch_size = 256
+batch_size = 1024
 eps = .2
 grad_eps = .5
-value_coef = .75
+value_coef = .5
 entropy_coef = .01
-
-with_background = False # Use backgrounds for the environments
-
+feature_dim = 256
+env_name = 'starpilot'
 use_mixreg  = False
+with_background = False # Use backgrounds for the environments
+gamma = 0.999
 increase = 2 # How much to augment the dataset with mixreg
 alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
 
@@ -160,16 +161,16 @@ class Policy(nn.Module):
 
 # Define environment
 # check the utils.py file for info on arguments
-env = make_env(num_envs, num_levels=num_levels, use_backgrounds=with_background)
+env = make_env(num_envs, num_levels=num_levels, env_name=env_name, use_backgrounds=with_background)
 print('Observation space:', env.observation_space)
 print('Action space:', env.action_space.n)
 
 # Define validation environment
-eval_env = make_env(num_envs, start_level=num_levels, num_levels=num_levels,env_name='starpilot', use_backgrounds=with_background)
+eval_env = make_env(num_envs, start_level=num_levels, num_levels=num_levels,env_name=env_name, use_backgrounds=with_background)
 
 # Define network
-encoder = SimpleImpalaEncoder(3,256)
-policy = Policy(encoder, 256, env.action_space.n)
+encoder = SimpleImpalaEncoder(3,feature_dim)
+policy = Policy(encoder, feature_dim, env.action_space.n)
 policy.cuda()
 
 # Define optimizer
