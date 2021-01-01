@@ -300,10 +300,11 @@ while step < total_steps:
   data_point = [step, storage.get_reward().item(), validation_reward.item()]
   data_log.append(data_point)
     
-with open(data_log_file_name, 'w', newline='') as f:
-  writer = csv.writer(f)
-  writer.writerows(data_log)
+  with open(data_log_file_name, 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerows(data_log)
+  
+  torch.save(policy.state_dict(), checkpoint_file_name)
 
 print('Completed training!')
-torch.save(policy.state_dict, checkpoint_file_name)
 

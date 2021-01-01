@@ -273,17 +273,22 @@ while step < total_steps:
   ## VALIDATION ##
   # Evaluate policy
   policy.eval()
-  validation_reward = []
+  info_stack = []
   for _ in range(num_steps):
     # Use policy
     v_action, v_log_prob, v_value = policy.act(v_obs)
 
     # Take step in environment
     v_obs, v_reward, v_done, v_info = eval_env.step(v_action)
-    validation_reward.append(torch.Tensor(v_reward))
+    info_stack.append(v_info)
 
   # Calculate average return
-  validation_reward = torch.stack(validation_reward).sum(0).mean(0)
+  valid_score = []
+  for i in range(num_steps):
+    info = info_stack[i]
+    valid_score.append([d['reward'] for d in info])
+  valid_score = torch.Tensor(valid_score)
+  validation_reward = valid_score.mean(1).sum(0)
   ## END OF VALIDATION ##
 
   # Update stats
@@ -292,10 +297,11 @@ while step < total_steps:
   data_point = [step, storage.get_reward().item(), validation_reward.item()]
   data_log.append(data_point)
     
-with open(data_log_file_name, 'w', newline='') as f:
-  writer = csv.writer(f)
-  writer.writerows(data_log)
+  with open(data_log_file_name, 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerows(data_log)
+  
+  torch.save(policy.state_dict(), checkpoint_file_name)
 
 print('Completed training!')
-torch.save(policy.state_dict, checkpoint_file_name)
 
