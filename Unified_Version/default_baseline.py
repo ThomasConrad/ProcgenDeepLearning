@@ -27,8 +27,8 @@ value_coef = .5
 entropy_coef = .01
 feature_dim = 256
 env_name = 'starpilot'
+with_background = False
 use_mixreg  = False
-with_background = False # Use backgrounds for the environments
 gamma = 0.999
 increase = 2 # How much to augment the dataset with mixreg
 alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
@@ -162,7 +162,7 @@ class Policy(nn.Module):
 
 # Define environment
 # check the utils.py file for info on arguments
-env = make_env(num_envs, num_levels=num_levels, use_backgrounds=with_background)
+env = make_env(num_envs,env_name=env_name, num_levels=num_levels, use_backgrounds=with_background)
 print('Observation space:', env.observation_space)
 print('Action space:', env.action_space.n)
 
@@ -289,8 +289,8 @@ while step < total_steps:
 
   # Calculate average return
   valid_score = []
-  for step in range(num_steps):
-    info = info_stack[step]
+  for i in range(num_steps):
+    info = info_stack[i]
     valid_score.append([d['reward'] for d in info])
   valid_score = torch.Tensor(valid_score)
   validation_reward = valid_score.mean(1).sum(0)
