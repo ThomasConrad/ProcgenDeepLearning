@@ -25,7 +25,7 @@ grad_eps = .5
 value_coef = .75
 entropy_coef = .01
 
-with_background = False # Use backgrounds for the environments
+with_background = True # Use backgrounds for the environments
 
 use_mixreg  = False
 increase = 2 # How much to augment the dataset with mixreg
