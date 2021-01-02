@@ -18,11 +18,11 @@ text = [0]*len(Dirs)
 plt.figure(1)
 for i,dir in enumerate(Dirs):
     header_list = ["steps", "train", "test"]
-    df = pd.read_csv(f'{dir}/training_stats_basic.csv',names=header_list)
+    df = pd.read_csv(f'{dir}/training_stats.csv',names=header_list)
     df["steps"] = pd.to_numeric(df["steps"], downcast="integer")
     df["train"] = pd.to_numeric(df["train"], downcast="float")
-
-    df['test'] = df['test'].apply(lambda x: float(x[7:-1]))
+    df["test"] = pd.to_numeric(df["test"], downcast="float")
+    #df['test'] = df['test'].apply(lambda x: float(x[7:-1]))
     err = df.groupby(np.arange(len(df))//10).std()
     df = df.groupby(np.arange(len(df))//10).mean()
     plt.figure(figsize=(4,4))
