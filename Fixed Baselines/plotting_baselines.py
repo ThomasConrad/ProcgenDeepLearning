@@ -13,12 +13,12 @@ import os
 
 Dirs = (next(os.walk('.'))[1])
 
-text = [0]*len(Dirs)*2
+text = [0]*len(Dirs)
 fig, ax = plt.subplots(nrows=4, ncols=4, sharex=True, sharey=False, figsize=(8, 8))
 i = 0
 for row in ax:
     for col in row:
-        dir = Dirs[i%8]
+        dir = Dirs[i]
         header_list = ["steps", "train", "test"]
         df = pd.read_csv(f'{dir}/training_stats.csv',names=header_list)
         df["steps"] = pd.to_numeric(df["steps"], downcast="integer")/1e6
