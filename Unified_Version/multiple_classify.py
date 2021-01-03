@@ -44,15 +44,14 @@ class Flatten(nn.Module):
 class ClassifierModule(nn.Module):
     def __init__(self):
         super().__init__()
-        self.classifier_model = Net(3,64,64,16) #Get this right, check the trained model params
+        self.classifier_model = Net(3,64,64,3) #Get this right, check the trained model params
         self.classifier_model.load_state_dict(torch.load("TrainedClassifier.pt"))
         self.classifier_model.eval()
-        #self.classifier_model
     def forward(self,x):
         with torch.no_grad():
-            x = self.classifier_model(x)
-            return x
+            return self.classifier_model(x)
 
+'''
 class NatureModel(nn.Module):
   def __init__(self, in_channels, feature_dim):
     super().__init__()
@@ -131,6 +130,74 @@ class ImpalaModel(nn.Module):
         z = self.fc(z)
         z = nn.ReLU()(z)
         return z
+'''
+
+class ResidualBlock(nn.Module):
+  def __init__(self, in_channels):
+    super().__init__()
+    self.layers = nn.Sequential(
+        nn.ReLU(),
+        nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1)
+    )
+
+  def forward(self, x):
+    return self.layers(x) + x
+
+class ImpalaBlock(nn.Module):
+  def __init__(self, in_channels, out_channels):
+    super().__init__()
+    self.layers = nn.Sequential(
+        nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1),
+        nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+        ResidualBlock(out_channels),
+        ResidualBlock(out_channels)
+    )
+
+  def forward(self, x):
+    return self.layers(x)
+
+class SimpleImpalaEncoder(nn.Module):
+  def __init__(self, in_channels, feature_dim):
+    super().__init__()
+    self.classifier = ClassifierModule()
+    self.layers1 = nn.Sequential(
+        ImpalaBlock(in_channels, out_channels=16),
+        ImpalaBlock(in_channels=16, out_channels=32),
+        ImpalaBlock(in_channels=32, out_channels=32),
+        nn.ReLU(),
+        Flatten()
+    )
+    self.layers2 = nn.Sequential(
+        nn.Linear(in_features=2048+3, out_features=feature_dim),
+        nn.ReLU()
+    )
+  
+  def forward(self, x):
+    y = self.layers1(x)
+    z = torch.cat([y, self.classifier(x)], dim=1)
+    z = self.layers2(z)
+    return z
+
+class Encoder(nn.Module):
+  def __init__(self, in_channels, feature_dim):
+    super().__init__()
+    self.layers = nn.Sequential(
+        nn.Conv2d(in_channels=in_channels, out_channels=32, kernel_size=8, stride=4), nn.ReLU(),
+        nn.BatchNorm2d(num_features=32),
+        nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2), nn.ReLU(),
+        nn.BatchNorm2d(num_features=64),
+        nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1), nn.ReLU(),
+        nn.BatchNorm2d(num_features=128),
+        nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1), nn.ReLU(),
+        Flatten(),
+        nn.Linear(in_features=1024, out_features=feature_dim), nn.ReLU()
+    )
+    self.apply(orthogonal_init)
+
+  def forward(self, x):
+    return self.layers(x)
 
 
 class Policy(nn.Module):
@@ -174,8 +241,8 @@ for e in env_names:
 print("Nr. of environments:", len(eval_environments))
 
 # Define network
-encoder = ImpalaModel(3,256)
-policy = Policy(encoder, 256, env.action_space.n)
+encoder = SimpleImpalaEncoder(3,feature_dim)
+policy = Policy(encoder, feature_dim, env.action_space.n)
 policy.cuda()
 
 # Define optimizer
@@ -191,15 +258,11 @@ storage = Storage(
 )
 
 ## Filename for checkpoints
-checkpoint_file_name = 'checkpoint_classify_multi'
-data_log_file_name = 'training_stats_classify_multi'
-if use_mixreg:
-    checkpoint_file_name += '_mixreg'
-    data_log_file_name += '_mixreg'
-    
+data_log_file_name = 'training_stats_multi_classify'
+checkpoint_file_name = 'checkpoint_multi_classify'
+
 data_log_file_name += '.csv'
 checkpoint_file_name += '.pt'
-
 
 # ## Training Loop
 
@@ -280,17 +343,22 @@ while step < total_steps:
   policy.eval()
   validation_rewards = []
   for e in eval_environments:
-      total_reward = []
+      info_stack = []
       for _ in range(num_steps):
         # Use policy
         v_action, v_log_prob, v_value = policy.act(v_obs)
 
         # Take step in environment
         v_obs, v_reward, v_done, v_info = eval_environments[e].step(v_action)
-        total_reward.append(torch.Tensor(v_reward))
+        info_stack.append(v_info)
 
       # Calculate average return
-      total_reward = torch.stack(total_reward).sum(0).mean(0)
+      valid_score = []
+      for i in range(num_steps):
+        info = info_stack[i]
+        valid_score.append([d['reward'] for d in info])
+      valid_score = torch.Tensor(valid_score)
+      total_reward = valid_score.mean(1).sum(0)
       validation_rewards.append(total_reward.item())
   ## END OF VALIDATION ##
       
@@ -302,13 +370,10 @@ while step < total_steps:
   for r in validation_rewards:
     data_point.append(r)
   data_log.append(data_point)
-
-  torch.save(policy.state_dict(), checkpoint_file_name)
     
-with open(data_log_file_name, 'w', newline='') as f:
-  writer = csv.writer(f)
-  writer.writerows(data_log)
+  with open(data_log_file_name, 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerows(data_log)
+  torch.save(policy.state_dict(), checkpoint_file_name)
 
 print('Completed training!')
-
-
