@@ -36,8 +36,8 @@ for i,dir in enumerate(Dirs):
     plt.xlabel('Steps')
     plt.ylabel('Reward')
     plt.title(f'{dir} baseline')
-
-    plt.savefig(f'{dir}plot_baseline.png')
+    plt.tight_layout()
+    plt.savefig(f'{dir}plot_baseline.png',dpi=300)
     text[i] = df.iloc[-1]
 
 df = pd.concat(text,axis=1)

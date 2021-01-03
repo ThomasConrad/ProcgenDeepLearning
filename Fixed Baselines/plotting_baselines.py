@@ -13,12 +13,12 @@ import os
 
 Dirs = (next(os.walk('.'))[1])
 
-text = [0]*len(Dirs)
-fig, ax = plt.subplots(nrows=4, ncols=2, sharex=True, sharey=False, figsize=(4, 8))
+text = [0]*len(Dirs)*2
+fig, ax = plt.subplots(nrows=4, ncols=4, sharex=True, sharey=False, figsize=(8, 8))
 i = 0
 for row in ax:
     for col in row:
-        dir = Dirs[i]
+        dir = Dirs[i%8]
         header_list = ["steps", "train", "test"]
         df = pd.read_csv(f'{dir}/training_stats.csv',names=header_list)
         df["steps"] = pd.to_numeric(df["steps"], downcast="integer")/1e6
@@ -40,11 +40,13 @@ for row in ax:
         #col.savefig(f'{dir}plot_baseline.png')
         text[i] = df.iloc[-1]
         i += 1
-fig.text(0.55, 0, 'Timesteps (M)', ha='center')
-fig.text(0, 0.5, 'Score', va='center', rotation='vertical')
-plt.tight_layout()
-plt.xticks([0,4,8])
+    fig.text(0.52, 0, 'Steps (M)', ha='center')
+    fig.text(0, 0.5, 'Reward', va='center', rotation='vertical')
+    plt.tight_layout()
+    plt.xticks([0,4,8])
 #plt.locator_params(axis='x', nbins=3)
+plt.savefig('alltogether.png',dpi=300)
+plt.legend(['Train','Test'])
 plt.show()
 # df = pd.concat(text,axis=1)
 # df.columns = Dirs
