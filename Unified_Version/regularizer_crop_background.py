@@ -28,7 +28,6 @@ feature_dim = 256
 env_name = 'starpilot'
 use_mixreg  = False
 with_background = True # Use backgrounds for the environments
-gamma = 0.999
 increase = 2 # How much to augment the dataset with mixreg
 alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
 
@@ -46,13 +45,24 @@ class RandomCrop(nn.Module):
       super().__init__()
       self.size = size
     def forward(self, x):
-        n, c, h, w = x.shape
-        w1 = torch.randint(0, w - self.size + 1, (n,))
-        h1 = torch.randint(0, h - self.size + 1, (n,))
-        cropped = torch.empty((n, c, self.size, self.size), dtype=x.dtype, device=x.device)
-        for i, (img, w11, h11) in enumerate(zip(x, w1, h1)):
-            cropped[i][:] = img[:, h11:h11 + self.size, w11:w11 + self.size]
-        return cropped
+        if self.training: #Random crop during training
+            n, c, h, w = x.shape
+            w1 = torch.randint(0, w - self.size + 1, (n,))
+            h1 = torch.randint(0, h - self.size + 1, (n,))
+            cropped = torch.empty((n, c, self.size, self.size), dtype=x.dtype, device=x.device)
+            for i, (img, w11, h11) in enumerate(zip(x, w1, h1)):
+                cropped[i][:] = img[:, h11:h11 + self.size, w11:w11 + self.size]
+            return cropped
+        else: #Center crop during evaluation
+            n, c, h, w = x.shape
+            w1 = torch.ones(n, dtype=torch.int32) * self.size
+            h1 = torch.ones(n, dtype=torch.int32) * self.size
+            top = (h - self.size)//2
+            left = (w - self.size)//2
+            cropped = torch.empty((n, c, self.size, self.size), dtype=x.dtype, device=x.device)
+            for i, (img, w11, h11) in enumerate(zip(x, w1, h1)):
+                cropped[i][:] = img[:, top:top + h11, left:left + w11]
+            return cropped
 
 #class RandomCutout(nn.Module):
 #    def __init__(self, min_cut=4, max_cut=24):

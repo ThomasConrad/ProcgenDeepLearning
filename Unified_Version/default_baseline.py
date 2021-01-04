@@ -29,7 +29,6 @@ feature_dim = 256
 env_name = 'starpilot'
 with_background = False
 use_mixreg  = False
-gamma = 0.999
 increase = 2 # How much to augment the dataset with mixreg
 alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
 
