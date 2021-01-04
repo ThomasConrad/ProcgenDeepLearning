@@ -1,5 +1,5 @@
 # REGULARIZATION AND MULTI-TASK AGENTS IN PROCEDURAL VIDEO GAMES
-This code repository contains the work performed by s183742 and s183779 in the course 02456 Deep learning, DTU Compute of Fall 2020.
+This code repository contains the work performed by Thomas R. S. Conrad (s183742) and Kristian S. Knudsen (s183779) in the course 02456 Deep learning, DTU Compute of Fall 2020.
 
 ## Requirements
 To run this repository, python 3 is required. The required packages are:
