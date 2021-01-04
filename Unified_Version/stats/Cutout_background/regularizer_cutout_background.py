@@ -13,29 +13,26 @@ import csv
 # ### Hyperparameters
 # Leave unchanged between comparison runs
 
-import sys
 # Hyperparameters
 total_steps = 8e6
-num_envs = 8
+num_envs = 64
 num_levels = 100
 num_steps = 256
 num_epochs = 3
-batch_size = int(sys.argv[2])
+batch_size = 1024
 eps = .2
 grad_eps = .5
 value_coef = .5
 entropy_coef = .01
 feature_dim = 256
-env_name = sys.argv[1]
-with_background = False
+env_name = 'starpilot'
 use_mixreg  = False
+with_background = True # Use backgrounds for the environments
+gamma = 0.999
 increase = 2 # How much to augment the dataset with mixreg
 alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-if device ==  torch.device('cpu'):
-    print('using cpu')
-else:
-    print('using gpu')
+
+
 # ### Network Definition
 # Leave unchanged between comparison runs
 
@@ -54,23 +51,23 @@ class Flatten(nn.Module):
 #            cropped[i][:] = img[:, h11:h11 + size, w11:w11 + size]
 #        return cropped
 
-#class RandomCutout(nn.Module):
-#    def __init__(self, min_cut=4, max_cut=24):
-#      super().__init__()
-#      self.min_cut = min_cut
-#      self.max_cut = max_cut
-#    def forward(self, x):
-#        if not self.training:
-#            return x
-#        n, c, h, w = x.shape
-#        w_cut = torch.randint(self.min_cut, self.max_cut + 1, (n,))
-#        h_cut = torch.randint(self.min_cut, self.max_cut + 1, (n,))
-#        fills = torch.randint(0, 255, (n, c, 1, 1)) # assume uint8.
-#        for img, wc, hc, fill in zip(x, w_cut, h_cut, fills):
-#            w1 = torch.randint(w - wc + 1, ()) # uniform over interior
-#            h1 = torch.randint(h - hc + 1, ())
-#            img[:, h1:h1 + hc, w1:w1 + wc] = fill
-#        return x
+class RandomCutout(nn.Module):
+    def __init__(self, min_cut=4, max_cut=24):
+      super().__init__()
+      self.min_cut = min_cut
+      self.max_cut = max_cut
+    def forward(self, x):
+        if not self.training:
+            return x
+        n, c, h, w = x.shape
+        w_cut = torch.randint(self.min_cut, self.max_cut + 1, (n,))
+        h_cut = torch.randint(self.min_cut, self.max_cut + 1, (n,))
+        fills = torch.randint(0, 255, (n, c, 1, 1)) # assume uint8.
+        for img, wc, hc, fill in zip(x, w_cut, h_cut, fills):
+            w1 = torch.randint(w - wc + 1, ()) # uniform over interior
+            h1 = torch.randint(h - hc + 1, ())
+            img[:, h1:h1 + hc, w1:w1 + wc] = fill
+        return x
 
 class ResidualBlock(nn.Module):
   def __init__(self, in_channels):
@@ -102,6 +99,7 @@ class SimpleImpalaEncoder(nn.Module):
   def __init__(self, in_channels, feature_dim):
     super().__init__()
     self.layers = nn.Sequential(
+        RandomCutout(),
         ImpalaBlock(in_channels, out_channels=16),
         ImpalaBlock(in_channels=16, out_channels=32),
         ImpalaBlock(in_channels=32, out_channels=32),
@@ -143,7 +141,7 @@ class Policy(nn.Module):
 
   def act(self, x):
     with torch.no_grad():
-      x = x.to(device).contiguous()
+      x = x.cuda().contiguous()
       dist, value = self.forward(x)
       action = dist.sample()
       log_prob = dist.log_prob(action)
@@ -163,7 +161,7 @@ class Policy(nn.Module):
 
 # Define environment
 # check the utils.py file for info on arguments
-env = make_env(num_envs,env_name=env_name, num_levels=num_levels, use_backgrounds=with_background)
+env = make_env(num_envs, num_levels=num_levels, env_name=env_name, use_backgrounds=with_background)
 print('Observation space:', env.observation_space)
 print('Action space:', env.action_space.n)
 
@@ -173,11 +171,12 @@ eval_env = make_env(num_envs, start_level=num_levels, num_levels=num_levels,env_
 # Define network
 encoder = SimpleImpalaEncoder(3,feature_dim)
 policy = Policy(encoder, feature_dim, env.action_space.n)
-policy.to(device)
+policy.load_state_dict(torch.load("checkpoint_cutout_background.pt"))
+policy.cuda()
 
 # Define optimizer
 # these are reasonable values but probably not optimal
-optimizer = torch.optim.Adam(policy.parameters(), lr=5e-4, eps=1e-5,weight_decay = 1e-5)
+optimizer = torch.optim.Adam(policy.parameters(), lr=3e-4, eps=1e-5,weight_decay = 0.01)
 
 # Define temporary storage
 # we use this to collect transitions during each iteration
@@ -188,8 +187,8 @@ storage = Storage(
 )
 
 ## Filename for checkpoints
-data_log_file_name = 'training_stats'
-checkpoint_file_name = 'checkpoint'
+data_log_file_name = 'training_stats_cutout'
+checkpoint_file_name = 'checkpoint_cutout'
 
 if use_mixreg:
     data_log_file_name += '_mixreg'
@@ -207,7 +206,7 @@ checkpoint_file_name += '.pt'
 # Run training
 obs = env.reset()
 v_obs = eval_env.reset()
-step = 0
+step = 4964352
 
 data_log = []
 while step < total_steps:
@@ -306,8 +305,7 @@ while step < total_steps:
   with open(data_log_file_name, 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerows(data_log)
-
+  
   torch.save(policy.state_dict(), checkpoint_file_name)
+
 print('Completed training!')
-
-

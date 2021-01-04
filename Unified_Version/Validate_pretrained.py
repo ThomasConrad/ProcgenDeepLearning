@@ -136,11 +136,11 @@ env_name = sys.argv[1]
 nameToPath = {'bigfish':'BigFish','bossfight':'BossFight','caveflyer':'Caveflyer','chaser':'Chaser',\
     'climber':'Climber','coinrun':'CoinRun','dodgeball':'DodgeBall','fruitbot':'FruitBot',\
         'heist':'Heist','jumper':'Jumper','leaper':'Leaper','maze':'Maze','ninja':'Ninja',\
-              'plunder':'Plunder','starpilot':'Starpilot'}
+              'plunder':'Plunder','starpilot':'Starpilot','miner':'Miner'}
 path = nameToPath[env_name]
-env = make_env(64, num_levels=100,env_name=env_name)
-eval_env = make_env(64, num_levels=100,start_level=100,env_name=env_name)
-obs = eval_env.reset()
+env = make_env(32, num_levels=100,env_name=env_name)
+eval_env = make_env(32, num_levels=100,start_level=100,env_name=env_name)
+obs = env.reset()
 v_obs = eval_env.reset()
 frames = []
 v_frames = []
@@ -153,7 +153,7 @@ policy.load_state_dict(torch.load(f"Baselines/{path}/checkpoint.pt",map_location
 policy.eval()
 info_stack = []
 v_info_stack = []
-for _ in range(512):
+for _ in range(256):
 # Use policy
     action, log_prob, value = policy.act(obs)
     v_action, v_log_prob, v_value = policy.act(v_obs)
@@ -188,5 +188,6 @@ print('Average train score:',test_reward,'Average test score:', validation_rewar
 # Save frames as video
 frames = torch.stack(frames)
 v_frames = torch.stack(v_frames)
-imageio.mimsave(f'test_{path}.mp4', frames, fps=25)
-imageio.mimsave(f'train_{path}.mp4', v_frames, fps=25)
+imageio.mimsave(f'test_{path}.mp4', v_frames, fps=25)
+imageio.mimsave(f'train_{path}.mp4', frames, fps=25)
+print(f'saved videos to test_{path}.mp4 and train_{path}.mp4')
