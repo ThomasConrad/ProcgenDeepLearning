@@ -16,11 +16,11 @@ import csv
 import sys
 # Hyperparameters
 total_steps = 8e6
-num_envs = 64
+num_envs = 1
 num_levels = 100
 num_steps = 256
 num_epochs = 3
-batch_size = sys.argv[2]
+batch_size = int(sys.argv[2])
 eps = .2
 grad_eps = .5
 value_coef = .5
