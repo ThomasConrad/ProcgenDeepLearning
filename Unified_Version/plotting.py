@@ -2,10 +2,13 @@ import csv
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+rcParams.update({'figure.autolayout': True})
 
 def plot_training_data(filename, figurename, title, size=4):
     
     plt.figure(figsize=(size,size))
+    plt.tight_layout()
     plt.title(title)
     plt.xlabel("Steps (M)")
     plt.ylabel("Reward")

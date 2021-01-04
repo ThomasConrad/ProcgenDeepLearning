@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils import make_env, Storage, orthogonal_init
-from classifier import Net
 
 import csv
 
@@ -16,8 +15,8 @@ import csv
 
 # Hyperparameters
 total_steps = 8e6
-num_envs = 96
-num_levels = 100
+num_envs = 64
+num_levels = 10
 num_steps = 256
 num_epochs = 3
 batch_size = 1024
@@ -26,9 +25,10 @@ grad_eps = .5
 value_coef = .5
 entropy_coef = .01
 feature_dim = 256
-
-env_name = 'starpilot,coinrun,bigfish'
-use_mixreg = False
+env_name = 'starpilot'
+use_mixreg  = False
+with_background = False # Use backgrounds for the environments
+gamma = 0.999
 increase = 2 # How much to augment the dataset with mixreg
 alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
 
@@ -36,100 +36,38 @@ alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
 # ### Network Definition
 # Leave unchanged between comparison runs
 
+# Network definition
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
 
-class ClassifierModule(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.classifier_model = Net(3,64,64,3) #Get this right, check the trained model params
-        self.classifier_model.load_state_dict(torch.load("TrainedClassifier.pt"))
-        self.classifier_model.eval()
-    def forward(self,x):
-        with torch.no_grad():
-            return self.classifier_model(x)
+#class RandomCrop(nn.Module, size=48):
+#    def forward(self, x):
+#        n, c, h, w = x.shape
+#        w1 = torch.randint(0, w - size + 1, (n,))
+#        h1 = torch.randint(0, h - size + 1, (n,))
+#        cropped = torch.empty((n, c, size, size), dtype=x.dtype, device=x.device)
+#        for i, (img, w11, h11) in enumerate(zip(x, w1, h1)):
+#            cropped[i][:] = img[:, h11:h11 + size, w11:w11 + size]
+#        return cropped
 
-'''
-class NatureModel(nn.Module):
-  def __init__(self, in_channels, feature_dim):
-    super().__init__()
-    self.layers = nn.Sequential(
-        nn.Conv2d(in_channels=in_channels, out_channels=32, kernel_size=8, stride=4), nn.ReLU(),
-        nn.BatchNorm2d(num_features=32),
-        nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2), nn.ReLU(),
-        nn.BatchNorm2d(num_features=64),
-        nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1), nn.ReLU(),
-        Flatten(),
-        nn.Linear(in_features=1024, out_features=feature_dim), nn.ReLU()
-    )
-    self.apply(orthogonal_init)
-
-  def forward(self, x):
-    return self.layers(x)
-
-
-class ResidualBlock(nn.Module):
-    def __init__(self,
-                 in_channels):
-        super(ResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1)
-
+class RandomCutout(nn.Module):
+    def __init__(self, min_cut=4, max_cut=24):
+      super().__init__()
+      self.min_cut = min_cut
+      self.max_cut = max_cut
     def forward(self, x):
-        out = nn.ReLU()(x)
-        out = self.conv1(out)
-        out = nn.ReLU()(out)
-        out = self.conv2(out)
-        return out + x
-
-class ImpalaBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(ImpalaBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1)
-        self.res1 = ResidualBlock(out_channels)
-        self.res2 = ResidualBlock(out_channels)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)(x)
-        x = self.res1(x)
-        x = self.res2(x)
+        if not self.training:
+            return x
+        n, c, h, w = x.shape
+        w_cut = torch.randint(self.min_cut, self.max_cut + 1, (n,))
+        h_cut = torch.randint(self.min_cut, self.max_cut + 1, (n,))
+        fills = torch.randint(0, 255, (n, c, 1, 1)) # assume uint8.
+        for img, wc, hc, fill in zip(x, w_cut, h_cut, fills):
+            w1 = torch.randint(w - wc + 1, ()) # uniform over interior
+            h1 = torch.randint(h - hc + 1, ())
+            img[:, h1:h1 + hc, w1:w1 + wc] = fill
         return x
-
-def xavier_uniform_init(module, gain=1.0):
-    if isinstance(module, nn.Linear) or isinstance(module, nn.Conv2d):
-        nn.init.xavier_uniform_(module.weight.data, gain)
-        nn.init.constant_(module.bias.data, 0)
-    return module
-
-class ImpalaModel(nn.Module):
-    def __init__(self,
-                 in_channels, 
-                 feature_dim,
-                 **kwargs):
-        super(ImpalaModel, self).__init__()
-        self.block1 = ImpalaBlock(in_channels=in_channels, out_channels=16)
-        self.block2 = ImpalaBlock(in_channels=16, out_channels=32)
-        self.block3 = ImpalaBlock(in_channels=32, out_channels=32)
-        self.fc = nn.Linear(in_features=32 * 8 * 8 + 16, out_features=feature_dim)
-
-        self.output_dim = 256
-        self.apply(xavier_uniform_init)
-
-        self.classifier = ClassifierModule()
-
-    def forward(self, x):
-        y = self.block1(x)
-        y = self.block2(y)
-        y = self.block3(y)
-        y = nn.ReLU()(y)
-        y = Flatten()(y)
-        z = torch.cat([y, self.classifier(x)], dim=1)
-        z = self.fc(z)
-        z = nn.ReLU()(z)
-        return z
-'''
 
 class ResidualBlock(nn.Module):
   def __init__(self, in_channels):
@@ -160,24 +98,19 @@ class ImpalaBlock(nn.Module):
 class SimpleImpalaEncoder(nn.Module):
   def __init__(self, in_channels, feature_dim):
     super().__init__()
-    self.classifier = ClassifierModule()
-    self.layers1 = nn.Sequential(
+    self.layers = nn.Sequential(
+        RandomCutout(),
         ImpalaBlock(in_channels, out_channels=16),
         ImpalaBlock(in_channels=16, out_channels=32),
         ImpalaBlock(in_channels=32, out_channels=32),
         nn.ReLU(),
-        Flatten()
-    )
-    self.layers2 = nn.Sequential(
-        nn.Linear(in_features=2048+3, out_features=feature_dim),
+        Flatten(),
+        nn.Linear(in_features=2048, out_features=feature_dim),
         nn.ReLU()
     )
   
   def forward(self, x):
-    y = self.layers1(x)
-    z = torch.cat([y, self.classifier(x)], dim=1)
-    z = self.layers2(z)
-    return z
+    return self.layers(x)
 
 class Encoder(nn.Module):
   def __init__(self, in_channels, feature_dim):
@@ -228,16 +161,12 @@ class Policy(nn.Module):
 
 # Define environment
 # check the utils.py file for info on arguments
-env = make_env(num_envs, num_levels=num_levels,env_name=env_name)
+env = make_env(num_envs, num_levels=num_levels, env_name=env_name, use_backgrounds=with_background)
 print('Observation space:', env.observation_space)
 print('Action space:', env.action_space.n)
 
-eval_environments = {}
-# Define validation environments
-env_names = env_name.split(',')
-for e in env_names:
-    eval_environments[e] = make_env(num_envs, start_level=num_levels, num_levels=num_levels,env_name=e)
-print("Nr. of environments:", len(eval_environments))
+# Define validation environment
+eval_env = make_env(num_envs, start_level=num_levels, num_levels=num_levels,env_name=env_name, use_backgrounds=with_background)
 
 # Define network
 encoder = SimpleImpalaEncoder(3,feature_dim)
@@ -245,29 +174,37 @@ policy = Policy(encoder, feature_dim, env.action_space.n)
 policy.cuda()
 
 # Define optimizer
-optimizer = torch.optim.Adam(policy.parameters(), lr=5e-4, eps=1e-5, weight_decay = 1e-5)
+# these are reasonable values but probably not optimal
+optimizer = torch.optim.Adam(policy.parameters(), lr=3e-4, eps=1e-5,weight_decay = 0.01)
 
 # Define temporary storage
 # we use this to collect transitions during each iteration
 storage = Storage(
     env.observation_space.shape,
     num_steps,
-    num_envs,
-    gamma=gamma
+    num_envs
 )
 
 ## Filename for checkpoints
-data_log_file_name = 'training_stats_multi_classify'
-checkpoint_file_name = 'checkpoint_multi_classify'
+data_log_file_name = 'training_stats_10_cutout'
+checkpoint_file_name = 'checkpoint_10_cutout'
+
+if use_mixreg:
+    data_log_file_name += '_mixreg'
+    checkpoint_file_name += '_mixreg'
+if with_background:
+    data_log_file_name += '_background'
+    checkpoint_file_name += '_background'
 
 data_log_file_name += '.csv'
 checkpoint_file_name += '.pt'
+
 
 # ## Training Loop
 
 # Run training
 obs = env.reset()
-v_obs = eval_environments[list(eval_environments)[0]].reset()
+v_obs = eval_env.reset()
 step = 0
 
 data_log = []
@@ -340,39 +277,34 @@ while step < total_steps:
   ## VALIDATION ##
   # Evaluate policy
   policy.eval()
-  validation_rewards = []
-  for e in eval_environments:
-      info_stack = []
-      for _ in range(num_steps):
-        # Use policy
-        v_action, v_log_prob, v_value = policy.act(v_obs)
+  info_stack = []
+  for _ in range(num_steps):
+    # Use policy
+    v_action, v_log_prob, v_value = policy.act(v_obs)
 
-        # Take step in environment
-        v_obs, v_reward, v_done, v_info = eval_environments[e].step(v_action)
-        info_stack.append(v_info)
+    # Take step in environment
+    v_obs, v_reward, v_done, v_info = eval_env.step(v_action)
+    info_stack.append(v_info)
 
-      # Calculate average return
-      valid_score = []
-      for i in range(num_steps):
-        info = info_stack[i]
-        valid_score.append([d['reward'] for d in info])
-      valid_score = torch.Tensor(valid_score)
-      total_reward = valid_score.mean(1).sum(0)
-      validation_rewards.append(total_reward.item())
+  # Calculate average return
+  valid_score = []
+  for i in range(num_steps):
+    info = info_stack[i]
+    valid_score.append([d['reward'] for d in info])
+  valid_score = torch.Tensor(valid_score)
+  validation_reward = valid_score.mean(1).sum(0)
   ## END OF VALIDATION ##
-      
 
   # Update stats
   step += num_envs * num_steps
-  print(f'Step: {step}\tMean reward: {storage.get_reward()}\tMean validation rewards: {validation_rewards}')
-  data_point = [step, storage.get_reward().item()]
-  for r in validation_rewards:
-    data_point.append(r)
+  print(f'Step: {step}\tMean reward: {storage.get_reward()}\tMean validation reward: {validation_reward}')
+  data_point = [step, storage.get_reward().item(), validation_reward.item()]
   data_log.append(data_point)
     
   with open(data_log_file_name, 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerows(data_log)
+  
   torch.save(policy.state_dict(), checkpoint_file_name)
 
 print('Completed training!')
