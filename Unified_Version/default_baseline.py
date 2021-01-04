@@ -16,7 +16,7 @@ import csv
 import sys
 # Hyperparameters
 total_steps = 8e6
-num_envs = 1
+num_envs = 8
 num_levels = 100
 num_steps = 256
 num_epochs = 3
