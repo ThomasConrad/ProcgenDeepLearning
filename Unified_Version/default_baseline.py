@@ -31,9 +31,11 @@ with_background = False
 use_mixreg  = False
 increase = 2 # How much to augment the dataset with mixreg
 alpha = 0.5 # Alpha value to use for the beta-distribution in mixreg
-
-
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if device ==  torch.device('cpu'):
+    print('using cpu')
+else:
+    print('using gpu')
 # ### Network Definition
 # Leave unchanged between comparison runs
 
@@ -141,7 +143,7 @@ class Policy(nn.Module):
 
   def act(self, x):
     with torch.no_grad():
-      x = x.cuda().contiguous()
+      x = x.to(device).contiguous()
       dist, value = self.forward(x)
       action = dist.sample()
       log_prob = dist.log_prob(action)
@@ -171,7 +173,7 @@ eval_env = make_env(num_envs, start_level=num_levels, num_levels=num_levels,env_
 # Define network
 encoder = SimpleImpalaEncoder(3,feature_dim)
 policy = Policy(encoder, feature_dim, env.action_space.n)
-policy.cuda()
+policy.to(device)
 
 # Define optimizer
 # these are reasonable values but probably not optimal
