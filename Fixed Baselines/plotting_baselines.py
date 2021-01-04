@@ -45,8 +45,8 @@ for row in ax:
     plt.tight_layout()
     plt.xticks([0,4,8])
 #plt.locator_params(axis='x', nbins=3)
-plt.savefig('alltogether.png',dpi=300)
 plt.legend(['Train','Test'])
+plt.savefig('alltogether.png',dpi=300)
 plt.show()
 # df = pd.concat(text,axis=1)
 # df.columns = Dirs
